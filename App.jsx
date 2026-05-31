@@ -106,37 +106,6 @@ const CATALOGUE = [
   },
 ];
 
-const USER_KEY = "paysage-user-v1";
-function getStorageKey(societyId) { return `paysage-fournitures-${societyId}-v1`; }
-function getChantiersKey(societyId) { return `paysage-chantiers-${societyId}-v1`; }
-
-function todayISO() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
-
-async function loadEntries(societyId) {
-  try { const r = await window.storage.get(getStorageKey(societyId), true); return r ? JSON.parse(r.value) : []; }
-  catch { return []; }
-}
-async function saveEntries(entries, societyId) {
-  try { await window.storage.set(getStorageKey(societyId), JSON.stringify(entries), true); } catch {}
-}
-async function loadUser() {
-  try { const r = await window.storage.get(USER_KEY, false); return r ? JSON.parse(r.value) : null; }
-  catch { return null; }
-}
-async function saveUser(u) {
-  try { await window.storage.set(USER_KEY, JSON.stringify(u), false); } catch {}
-}
-async function loadChantiers(defaults, societyId) {
-  try { const r = await window.storage.get(getChantiersKey(societyId), true); return r ? JSON.parse(r.value) : defaults; }
-  catch { return defaults; }
-}
-async function saveChantiers(list, societyId) {
-  try { await window.storage.set(getChantiersKey(societyId), JSON.stringify(list), true); } catch {}
-}
-
 // ── Icônes ─────────────────────────────────────────────────────────────────
 const IconPlant = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22V12"/><path d="M12 12C12 12 7 10 5 6c4 0 7 2 7 6z"/><path d="M12 12c0 0 5-2 7-6-4 0-7 2-7 6z"/></svg>;
 const IconPlus = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
