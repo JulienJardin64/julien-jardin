@@ -243,40 +243,43 @@ export default function App() {
 
   const [form, setForm] = useState(emptyForm(""));
 
-  // Charger l'utilisateur mémorisé + chantiers
-  useEffect(() => {
-    loadUser().then(u => {
-      setUser(u);
-      if (u) setForm(emptyForm(u.name));
-      setLoadingUser(false);
-    });
-    loadUser().then(u2 => {
-      if (u2?.societyId) {
-        loadChantiers(CHANTIERS, u2.societyId).then(list => setChantiers([...list].sort((a, b) => a.localeCompare(b, "fr"))));
-      }
-    });
-  }, []);
-
-  const refresh = useCallback(async () => {
-    const u = await loadUser();
-    if (!u?.societyId) { setLoading(false); return; }
-    const data = await loadEntries(u.societyId);
+  const refresh = useCallback(async (sid) => {
+    if (!sid) { setLoading(false); return; }
+    const data = await loadEntries(sid);
     setEntries(data);
     setLastSync(new Date());
     setLoading(false);
   }, []);
 
+  // Charger l'utilisateur mémorisé + chantiers + données
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 15000);
+    loadUser().then(u => {
+      setUser(u);
+      if (u) {
+        setForm(emptyForm(u.name));
+        refresh(u.societyId);
+        loadChantiers(CHANTIERS, u.societyId).then(list => setChantiers([...list].sort((a, b) => a.localeCompare(b, "fr"))));
+      } else {
+        setLoading(false);
+      }
+      setLoadingUser(false);
+    });
+  }, []);
+
+  // Auto-refresh toutes les 15s
+  useEffect(() => {
+    if (!user?.societyId) return;
+    const interval = setInterval(() => refresh(user.societyId), 15000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [user, refresh]);
 
   async function handleLogin(name, societyId) {
     const u = { name, societyId };
     setUser(u);
     await saveUser(u);
     setForm(emptyForm(name));
+    refresh(societyId);
+    loadChantiers(CHANTIERS, societyId).then(list => setChantiers([...list].sort((a, b) => a.localeCompare(b, "fr"))));
   }
 
   async function handleRenameUser() {
