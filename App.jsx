@@ -58,6 +58,11 @@ async function saveChantiers(list, societyId) {
   } catch {}
 }
 
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
 
 const C = {
   soil: "#2C1A0E", bark: "#4A2E1A", moss: "#3D5A3E", leaf: "#5C8B3F",
