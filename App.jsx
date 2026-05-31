@@ -292,6 +292,13 @@ export default function App() {
     setNewUserName("");
   }
 
+  async function handleLogout() {
+    localStorage.removeItem(USER_KEY);
+    setUser(null);
+    setEntries([]);
+    setChantiers(CHANTIERS);
+  }
+
   async function handleSubmit() {
     const cat = CATALOGUE.find(c => c.id === form.catId);
     const sous = cat?.sous.find(s => s.id === form.sousId);
