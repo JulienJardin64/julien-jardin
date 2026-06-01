@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://ctqjjdrppoglpfnvbpce.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0cWpqZHJwcG9nbHBmbnZicGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTAyOTgsImV4cCI6MjA5NTE4NjI5OH0.FWFlxwZAObMKcIPQvBGy9aQhMgzuMZK86JElWVuAFHk";
@@ -13,34 +14,45 @@ function getStorageKey(societyId) { return "paysage-fournitures-" + societyId + 
 function getChantiersKey(societyId) { return "paysage-chantiers-" + societyId + "-v1"; }
 function getTeamKey(societyId) { return "paysage-team-" + societyId + "-v1"; }
 
-async function loadEntries(societyId) {
-  try { const r = await window.storage.get(getStorageKey(societyId), true); return r ? JSON.parse(r.value) : []; }
-  catch { return []; }
-}
-async function saveEntries(entries, societyId) {
-  try { await window.storage.set(getStorageKey(societyId), JSON.stringify(entries), true); } catch {}
-}
-async function loadUser() {
-  try { const r = await window.storage.get(USER_KEY, false); return r ? JSON.parse(r.value) : null; }
-  catch { return null; }
-}
-async function saveUser(u) {
-  try { await window.storage.set(USER_KEY, JSON.stringify(u), false); } catch {}
-}
-async function loadChantiers(defaults, societyId) {
-  try { const r = await window.storage.get(getChantiersKey(societyId), true); return r ? JSON.parse(r.value) : defaults; }
-  catch { return defaults; }
-}
-async function saveChantiers(list, societyId) {
-  try { await window.storage.set(getChantiersKey(societyId), JSON.stringify(list), true); } catch {}
+const supabase = createClient("https://ctqjjdrppoglpfnvbpce.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0cWpqZHJwcG9nbHBmbnZicGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTAyOTgsImV4cCI6MjA5NTE4NjI5OH0.FWFlxwZAObMKcIPQvBGy9aQhMgzuMZK86JElWVuAFHk");
+
+async function upsert(key, value) {
+  try {
+    await supabase.from("app_storage").upsert({ key, value: JSON.stringify(value) }, { onConflict: "key" });
+  } catch(e) { console.error("upsert error", e); }
 }
 
+async function fetch_key(key, fallback) {
+  try {
+    const { data, error } = await supabase.from("app_storage").select("value").eq("key", key).maybeSingle();
+    if (error || !data) return fallback;
+    return JSON.parse(data.value);
+  } catch { return fallback; }
+}
+
+async function loadEntries(societyId) {
+  return fetch_key(getStorageKey(societyId), []);
+}
+async function saveEntries(entries, societyId) {
+  await upsert(getStorageKey(societyId), entries);
+}
+async function loadUser() {
+  try { const raw = localStorage.getItem(USER_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+async function saveUser(u) {
+  try { localStorage.setItem(USER_KEY, JSON.stringify(u)); } catch {}
+}
+async function loadChantiers(defaults, societyId) {
+  return fetch_key(getChantiersKey(societyId), defaults);
+}
+async function saveChantiers(list, societyId) {
+  await upsert(getChantiersKey(societyId), list);
+}
 async function loadTeam(societyId) {
-  try { const r = await window.storage.get(getTeamKey(societyId), true); return r ? JSON.parse(r.value) : DEFAULT_TEAM; }
-  catch { return DEFAULT_TEAM; }
+  return fetch_key(getTeamKey(societyId), DEFAULT_TEAM);
 }
 async function saveTeam(list, societyId) {
-  try { await window.storage.set(getTeamKey(societyId), JSON.stringify(list), true); } catch {}
+  await upsert(getTeamKey(societyId), list);
 }
 
 function todayISO() {
