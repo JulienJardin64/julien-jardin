@@ -222,6 +222,8 @@ export default function App() {
     const updated = entries.map(e => e.id === id ? { ...e, facture: !e.facture } : e);
     setEntries(updated);
     await saveEntries(updated, user.societyId);
+    const confirmed = await loadEntries(user.societyId);
+    if (confirmed !== null) setEntries(confirmed);
     isSaving.current = false;
   }
 
@@ -268,7 +270,7 @@ export default function App() {
   // Auto-refresh toutes les 15s
   useEffect(() => {
     if (!user?.societyId) return;
-    const interval = setInterval(() => refresh(user.societyId), 15000);
+    const interval = setInterval(() => refresh(user.societyId), 60000);
     return () => clearInterval(interval);
   }, [user, refresh]);
 
@@ -339,6 +341,11 @@ export default function App() {
     isSaving.current = true;
     setEntries(updated);
     await saveEntries(updated, user.societyId);
+    // Relire depuis Supabase pour confirmer la persistance
+    const confirmed = await loadEntries(user.societyId);
+    if (confirmed && confirmed.length > 0) {
+      setEntries(confirmed);
+    }
     isSaving.current = false;
     setSaved(true);
     setTimeout(() => { setSaved(false); setView("list"); }, 1200);
@@ -350,6 +357,8 @@ export default function App() {
     isSaving.current = true;
     setEntries(updated);
     await saveEntries(updated, user.societyId);
+    const confirmed = await loadEntries(user.societyId);
+    if (confirmed !== null) setEntries(confirmed);
     isSaving.current = false;
     setConfirmDeleteId(null);
   }
