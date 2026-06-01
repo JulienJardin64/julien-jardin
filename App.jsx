@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://ctqjjdrppoglpfnvbpce.supabase.co";
@@ -205,6 +205,7 @@ export default function App() {
   const [newUserName, setNewUserName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const isSaving = React.useRef(false);
   const [chantiers, setChantiers] = useState(CHANTIERS);
   const [viewChantiers, setViewChantiers] = useState(false);
   const [newChantierName, setNewChantierName] = useState("");
@@ -217,9 +218,11 @@ export default function App() {
   const isAdmin = user?.name?.trim().toLowerCase().startsWith("julien");
 
   async function toggleFacture(id) {
+    isSaving.current = true;
     const updated = entries.map(e => e.id === id ? { ...e, facture: !e.facture } : e);
     setEntries(updated);
     await saveEntries(updated, user.societyId);
+    isSaving.current = false;
   }
 
   const emptyForm = useCallback((u) => ({
@@ -239,7 +242,7 @@ export default function App() {
   const [form, setForm] = useState(emptyForm(""));
 
   const refresh = useCallback(async (sid) => {
-    if (!sid) { setLoading(false); return; }
+    if (!sid || isSaving.current) { setLoading(false); return; }
     const data = await loadEntries(sid);
     setEntries(data);
     setLastSync(new Date());
@@ -333,8 +336,10 @@ export default function App() {
     } else {
       updated = [newEntry, ...entries];
     }
+    isSaving.current = true;
     setEntries(updated);
     await saveEntries(updated, user.societyId);
+    isSaving.current = false;
     setSaved(true);
     setTimeout(() => { setSaved(false); setView("list"); }, 1200);
     setForm(f => ({ ...f, catId: null, sousId: null, nomLibre: "", quantite: "", quantite2: "", prix: "", note: "", date: todayISO() }));
@@ -342,8 +347,10 @@ export default function App() {
 
   async function handleDelete(id) {
     const updated = entries.filter(e => e.id !== id);
+    isSaving.current = true;
     setEntries(updated);
     await saveEntries(updated, user.societyId);
+    isSaving.current = false;
     setConfirmDeleteId(null);
   }
 
