@@ -254,8 +254,16 @@ export default function App() {
 
   const refresh = useCallback(async (sid) => {
     if (!sid || isSaving.current) { setLoading(false); return; }
-    const data = await loadEntries(sid);
-    setEntries(data);
+    try {
+      const data = await loadEntries(sid);
+      if (Array.isArray(data) && data.length > 0) {
+        setEntries(data);
+      } else if (Array.isArray(data) && data.length === 0) {
+        // Vider seulement si la liste locale est déjà vide (évite d'écraser des données en mémoire)
+        setEntries(prev => prev.length === 0 ? [] : prev);
+      }
+      // Si data est null/undefined (erreur réseau), on garde l'état actuel
+    } catch {}
     setLastSync(new Date());
     setLoading(false);
   }, []);
