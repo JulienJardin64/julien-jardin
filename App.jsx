@@ -240,34 +240,37 @@ export default function App() {
 
   // Charger l'utilisateur mémorisé + chantiers
   useEffect(() => {
-    loadUser().then(u => {
-      setUser(u);
-      if (u) setForm(emptyForm(u.name, chantiers[0]));
-      setLoadingUser(false);
-    });
-    loadUser().then(u2 => {
-      if (u2?.societyId) {
-        loadChantiers(CHANTIERS, u2.societyId).then(list => {
-          const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
-          setChantiers(sorted);
-          setForm(f => ({ ...f, chantier: f.chantier && sorted.includes(f.chantier) ? f.chantier : sorted[0] }));
-        });
+    loadUser().then(async u => {
+      if (u) {
+        setUser(u);
+        // Charger les chantiers AVANT de créer le form pour avoir le bon premier chantier
+        const list = await loadChantiers(CHANTIERS, u.societyId);
+        const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
+        setChantiers(sorted);
+        setForm(emptyForm(u.name, sorted[0]));
       }
+      setLoadingUser(false);
     });
   }, []);
 
   const refresh = useCallback(async () => {
     const u = await loadUser();
     if (!u?.societyId) { setLoading(false); return; }
-    const data = await loadEntries(u.societyId);
-    setEntries(data);
+    try {
+      const data = await loadEntries(u.societyId);
+      if (Array.isArray(data) && data.length > 0) {
+        setEntries(data);
+      } else if (Array.isArray(data) && data.length === 0) {
+        setEntries(prev => prev.length === 0 ? [] : prev);
+      }
+    } catch {}
     setLastSync(new Date());
     setLoading(false);
   }, []);
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 15000);
+    const interval = setInterval(refresh, 60000);
     return () => clearInterval(interval);
   }, [refresh]);
 
@@ -275,7 +278,12 @@ export default function App() {
     const u = { name, societyId };
     setUser(u);
     await saveUser(u);
-    setForm(emptyForm(name, chantiers[0]));
+    // Charger les chantiers depuis Supabase pour avoir la liste à jour
+    const list = await loadChantiers(CHANTIERS, societyId);
+    const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
+    setChantiers(sorted);
+    setForm(emptyForm(name, sorted[0]));
+    refresh();
   }
 
   async function handleRenameUser() {
@@ -329,7 +337,7 @@ export default function App() {
     setSaved(true);
     setView("list");
     setTimeout(() => { setSaved(false); }, 1200);
-    setForm(f => ({ ...f, catId: null, sousId: null, nomLibre: "", quantite: "", quantite2: "", prix: "", note: "", date: todayISO() }));
+    setForm(f => ({ ...f, catId: null, sousId: null, nomLibre: "", quantite: "", quantite2: "", prix: "", note: "", date: todayISO(), chantier: chantiers[0] || f.chantier }));
   }
 
   async function handleDelete(id) {
@@ -373,8 +381,7 @@ export default function App() {
     setChantiers(updated);
     await saveChantiers(updated, user.societyId);
     setNewChantierName("");
-    // Mettre à jour le chantier par défaut du formulaire
-    setForm(f => ({ ...f, chantier: f.chantier || updated[0] }));
+    setForm(f => ({ ...f, chantier: updated.includes(f.chantier) ? f.chantier : updated[0] }));
   }
 
   async function handleSaveChantier() {
