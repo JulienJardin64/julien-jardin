@@ -151,7 +151,6 @@ function LoginScreen({ onLogin }) {
             </div>
           </div>
           <input
-            autoFocus
             value={societyId}
             onChange={e => setSocietyId(e.target.value)}
             onKeyDown={e => e.key === "Enter" && validSociety && document.getElementById("nameInput")?.focus()}
