@@ -121,7 +121,6 @@ function LoginScreen({ onLogin, teamList = ["Julien", "Théo", "Raphaël", "Flor
   const [societyId, setSocietyId] = useState("julienjardin");
   const [name, setName] = useState("");
   const validSociety = societyId.trim().length >= 2;
-  const validSociety = societyId.trim().length >= 2;
   const validName = name.trim().length >= 2;
   const valid = validSociety && validName;
 
