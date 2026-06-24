@@ -118,7 +118,7 @@ const IconPencil = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 
 // ── Écran de connexion ─────────────────────────────────────────────────────
 function LoginScreen({ onLogin }) {
-  const [societyId, setSocietyId] = useState("");
+  const [societyId, setSocietyId] = useState("julienjardin");
   const [name, setName] = useState("");
   const validSociety = societyId.trim().length >= 2;
   const validName = name.trim().length >= 2;
