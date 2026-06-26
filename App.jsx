@@ -13,6 +13,11 @@ function getStorageKey(societyId) { return "paysage-fournitures-" + societyId + 
 function getChantiersKey(societyId) { return "paysage-chantiers-" + societyId + "-v1"; }
 function getTeamKey(societyId) { return "paysage-team-" + societyId + "-v1"; }
 
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
 async function loadEntries(societyId) {
   try {
     const { data, error } = await supabase
