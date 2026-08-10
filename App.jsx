@@ -498,11 +498,11 @@ export default function App() {
               )}
             </div>
           </div>
-          {/* Ligne 2 (admin only) : bouton Chantiers */}
+          {/* Ligne 2 (admin only) : bouton Clients */}
           {isAdmin && (
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setViewChantiers(true)} style={{ background: C.moss, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
-                🏗 Chantiers
+                👤 Clients
               </button>
               <button onClick={() => setViewTeam(true)} style={{ background: C.sky, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
                 👷 Équipe
@@ -538,7 +538,7 @@ export default function App() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "18px 0 10px" }}>
               {[
-                { label: "Chantiers actifs", value: Object.keys(chantierCounts).length, color: C.leaf },
+                { label: "Clients actifs", value: Object.keys(chantierCounts).length, color: C.leaf },
                 { label: "Saisies du jour", value: entries.filter(e => e.date.slice(0, 10) === todayISO()).length, color: C.rust },
                 { label: "Total fournitures", value: entries.length, color: C.sky },
               ].map(s => (
@@ -659,9 +659,9 @@ export default function App() {
                 <div style={{ fontSize: 11, color: C.sage, marginTop: 4 }}>Date du jour par défaut · modifiable si besoin</div>
               </div>
 
-              {/* Chantier */}
+              {/* Client */}
               <div style={{ marginBottom: 18 }}>
-                <label style={labelStyle}>Chantier *</label>
+                <label style={labelStyle}>Client *</label>
                 <select value={form.chantier} onChange={e => setForm(p => ({ ...p, chantier: e.target.value }))} style={selectStyle}>
                   {chantiers.map(c => <option key={c}>{c}</option>)}
                 </select>
@@ -769,7 +769,7 @@ export default function App() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ background: C.white, borderRadius: "20px 20px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 -8px 32px rgba(0,0,0,0.2)", fontFamily: "Georgia, serif" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <div style={{ fontWeight: 700, fontSize: 18, color: C.bark }}>🏗 Gestion des chantiers</div>
+              <div style={{ fontWeight: 700, fontSize: 18, color: C.bark }}>👤 Gestion des clients</div>
               <button onClick={() => { setViewChantiers(false); setNewChantierName(""); setEditingChantier(null); }} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa", lineHeight: 1 }}>✕</button>
             </div>
 
@@ -779,7 +779,7 @@ export default function App() {
                 value={newChantierName}
                 onChange={e => setNewChantierName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleAddChantier()}
-                placeholder="Nom du nouveau chantier…"
+                placeholder="Nom du nouveau client…"
                 style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${C.sand}`, fontSize: 15, fontFamily: "Georgia, serif", outline: "none", background: C.cream }}
               />
               <button onClick={handleAddChantier} disabled={!newChantierName.trim() || chantiers.includes(newChantierName.trim())}
