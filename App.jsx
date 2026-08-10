@@ -501,8 +501,9 @@ export default function App() {
           {/* Ligne 2 (admin only) : bouton Clients */}
           {isAdmin && (
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setViewChantiers(true)} style={{ background: C.moss, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
-                👤 Clients
+              <button onClick={() => setViewChantiers(true)} style={{ background: C.moss, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Clients
               </button>
               <button onClick={() => setViewTeam(true)} style={{ background: C.sky, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
                 👷 Équipe
