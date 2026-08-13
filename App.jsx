@@ -9,9 +9,11 @@ const LOGO_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQUAAAENCAYAAAAG
 
 const USER_KEY = "paysage-user-v1";
 const DEFAULT_TEAM = ["Julien", "Théo", "Raphaël", "Florent"];
+const FAMILLES = ["Traitement", "Terreau", "Gazon", "Végétaux", "Autre"];
 function getStorageKey(societyId) { return "paysage-fournitures-" + societyId + "-v1"; }
 function getChantiersKey(societyId) { return "paysage-chantiers-" + societyId + "-v1"; }
 function getTeamKey(societyId) { return "paysage-team-" + societyId + "-v1"; }
+function getArticlesKey(societyId) { return "paysage-articles-" + societyId + "-v1"; }
 
 function todayISO() {
   const d = new Date();
@@ -76,6 +78,20 @@ async function loadTeam(societyId) {
 async function saveTeam(list, societyId) {
   try {
     await supabase.from("app_storage").upsert({ key: getTeamKey(societyId), value: JSON.stringify(list) }, { onConflict: "key" });
+  } catch {}
+}
+
+async function loadArticles(societyId) {
+  try {
+    const { data, error } = await supabase.from("app_storage").select("value").eq("key", getArticlesKey(societyId)).single();
+    if (error || !data) return [];
+    return JSON.parse(data.value);
+  } catch { return []; }
+}
+
+async function saveArticles(list, societyId) {
+  try {
+    await supabase.from("app_storage").upsert({ key: getArticlesKey(societyId), value: JSON.stringify(list) }, { onConflict: "key" });
   } catch {}
 }
 
@@ -239,6 +255,10 @@ export default function App() {
   const [viewTeam, setViewTeam] = useState(false);
   const [newMemberName, setNewMemberName] = useState("");
   const [editingMember, setEditingMember] = useState(null);
+  const [articles, setArticles] = useState([]);
+  const [viewArticles, setViewArticles] = useState(false);
+  const [newArticle, setNewArticle] = useState({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "" });
+  const [editingArticle, setEditingArticle] = useState(null); // { index, famille, nom, unite, prixTTC, marge }
 
   const isAdmin = user?.name?.trim().toLowerCase().startsWith("julien");
 
@@ -253,13 +273,10 @@ export default function App() {
     salarié: u || "",
     date: todayISO(),
     note: "",
-    // cascade
-    catId: null,      // id catégorie choisie
-    sousId: null,     // id sous-catégorie choisie
-    nomLibre: "",     // pour végétaux / autre
+    // sélection article
+    famille: null,       // famille choisie
+    articleNom: "",      // nom de l'article choisi
     quantite: "",
-    quantite2: "",
-    prix: "",
   }), []);
 
   const [form, setForm] = useState(emptyForm(""));
@@ -269,13 +286,15 @@ export default function App() {
     loadUser().then(async u => {
       if (u) {
         setUser(u);
-        const [list, teamList] = await Promise.all([
+        const [list, teamList, articlesList] = await Promise.all([
           loadChantiers(CHANTIERS, u.societyId),
           loadTeam(u.societyId),
+          loadArticles(u.societyId),
         ]);
         const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
         setChantiers(sorted);
         setTeam(teamList);
+        setArticles(articlesList);
         setForm(emptyForm(u.name, sorted[0]));
       }
       setLoadingUser(false);
@@ -307,13 +326,15 @@ export default function App() {
     const u = { name, societyId };
     setUser(u);
     await saveUser(u);
-    const [list, teamList] = await Promise.all([
+    const [list, teamList, articlesList] = await Promise.all([
       loadChantiers(CHANTIERS, societyId),
       loadTeam(societyId),
+      loadArticles(societyId),
     ]);
     const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
     setChantiers(sorted);
     setTeam(teamList);
+    setArticles(articlesList);
     setForm(emptyForm(name, sorted[0]));
     refresh();
   }
@@ -329,32 +350,21 @@ export default function App() {
   }
 
   async function handleSubmit() {
-    const cat = CATALOGUE.find(c => c.id === form.catId);
-    const sous = cat?.sous.find(s => s.id === form.sousId);
-    if (!sous || !form.salarié.trim()) return;
-    if (sous.id === "desherbant" && !form.quantite && !form.quantite2) return;
-    if (sous.quantite && sous.id !== "desherbant" && !form.quantite) return;
-    if (sous.nom && !form.nomLibre.trim()) return;
-    const fournitureLabel = sous.nom ? form.nomLibre.trim() : sous.label;
+    const art = articles.find(a => a.famille === form.famille && a.nom === form.articleNom);
+    if (!art || !form.salarié.trim() || !form.quantite) return;
     const isoDate = new Date(form.date + "T12:00:00").toISOString();
-    // Désherbant : bouchons ou pulvérisateur (exclusif)
-    let quantiteFinal = sous.quantite ? form.quantite : "1";
-    let uniteFinal = sous.unite || "";
-    if (sous.id === "desherbant") {
-      if (form.quantite2) { quantiteFinal = form.quantite2; uniteFinal = "pulvérisateur(s)"; }
-      else { quantiteFinal = form.quantite; uniteFinal = "bouchons"; }
-    }
     const newEntry = {
       chantier: form.chantier,
       salarié: form.salarié,
       date: isoDate,
       note: form.note,
-      fourniture: fournitureLabel,
-      categorie: cat.label,
-      quantite: quantiteFinal,
-      unite: uniteFinal,
-      quantite2: form.quantite2 || "",
-      prix: form.prix || "",
+      fourniture: art.nom,
+      categorie: art.famille,
+      quantite: form.quantite,
+      unite: art.unite || "",
+      quantite2: "",
+      prix: art.prixTTC ?? "",   // stocké pour l'export PDF, non affiché à la saisie
+      marge: art.marge ?? "",    // stocké pour l'export PDF, non affiché à la saisie
       id: Date.now(),
     };
     let updated;
@@ -369,7 +379,7 @@ export default function App() {
     setSaved(true);
     setView("list");
     setTimeout(() => { setSaved(false); }, 1200);
-    setForm(f => ({ ...f, catId: null, sousId: null, nomLibre: "", quantite: "", quantite2: "", prix: "", note: "", date: todayISO(), chantier: chantiers[0] || f.chantier }));
+    setForm(f => ({ ...f, famille: null, articleNom: "", quantite: "", note: "", date: todayISO(), chantier: chantiers[0] || f.chantier }));
   }
 
   async function handleDelete(id) {
@@ -380,28 +390,16 @@ export default function App() {
   }
 
   function handleEdit(e) {
-    // Retrouver catId et sousId depuis la catégorie et fourniture stockées
-    let catId = null, sousId = null, nomLibre = "";
-    for (const cat of CATALOGUE) {
-      for (const sous of cat.sous) {
-        if (cat.label === e.categorie) {
-          catId = cat.id;
-          if (sous.nom) { sousId = sous.id; nomLibre = e.fourniture; break; }
-          if (sous.label === e.fourniture) { sousId = sous.id; break; }
-        }
-      }
-      if (catId) break;
-    }
+    // Reconstituer la famille et l'article depuis l'entrée stockée
     setEditingId(e.id);
     setForm({
       chantier: e.chantier,
       salarié: e.salarié,
       date: e.date.slice(0, 10),
       note: e.note || "",
-      catId, sousId, nomLibre,
-      quantite: e.quantite === "1" ? "" : e.quantite,
-      quantite2: e.quantite2 || "",
-      prix: e.prix || "",
+      famille: e.categorie || null,
+      articleNom: e.fourniture || "",
+      quantite: e.quantite === "1" ? "" : (e.quantite || ""),
     });
     setView("add");
   }
@@ -455,6 +453,43 @@ export default function App() {
     await saveTeam(updated, user.societyId);
   }
 
+  async function handleAddArticle() {
+    const nom = newArticle.nom.trim();
+    if (!nom) return;
+    const art = {
+      famille: newArticle.famille,
+      nom,
+      unite: newArticle.unite.trim(),
+      prixTTC: newArticle.prixTTC,
+      marge: newArticle.marge,
+    };
+    const updated = [...articles, art].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+    setArticles(updated);
+    await saveArticles(updated, user.societyId);
+    setNewArticle({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "" });
+  }
+
+  async function handleSaveArticle() {
+    const nom = editingArticle.nom.trim();
+    if (!nom) return;
+    const updated = articles.map((a, i) => i === editingArticle.index ? {
+      famille: editingArticle.famille,
+      nom,
+      unite: (editingArticle.unite || "").trim(),
+      prixTTC: editingArticle.prixTTC,
+      marge: editingArticle.marge,
+    } : a).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+    setArticles(updated);
+    await saveArticles(updated, user.societyId);
+    setEditingArticle(null);
+  }
+
+  async function handleDeleteArticle(idx) {
+    const updated = articles.filter((_, i) => i !== idx);
+    setArticles(updated);
+    await saveArticles(updated, user.societyId);
+  }
+
   const filtered = filterChantier === "Tous" ? entries : entries.filter(e => e.chantier === filterChantier);
   const grouped = filtered.reduce((acc, e) => { (acc[e.chantier] = acc[e.chantier] || []).push(e); return acc; }, {});
   const chantierCounts = entries.reduce((acc, e) => { acc[e.chantier] = (acc[e.chantier] || 0) + 1; return acc; }, {});
@@ -500,13 +535,17 @@ export default function App() {
           </div>
           {/* Ligne 2 (admin only) : bouton Clients */}
           {isAdmin && (
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => setViewChantiers(true)} style={{ background: C.moss, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Clients
               </button>
               <button onClick={() => setViewTeam(true)} style={{ background: C.sky, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
                 👷 Équipe
+              </button>
+              <button onClick={() => setViewArticles(true)} style={{ background: C.rust, border: "none", borderRadius: 8, color: C.white, padding: "7px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                Articles
               </button>
             </div>
           )}
@@ -587,9 +626,6 @@ export default function App() {
                               {(e.quantite && e.quantite !== "1") || e.unite ? (
                                 <span style={{ background: "#EDF7E5", border: `1px solid ${C.sage}`, borderRadius: 6, padding: "2px 8px", fontSize: 12, color: C.moss, fontWeight: 600 }}>{e.quantite}{e.unite ? ` ${e.unite}` : ""}</span>
                               ) : null}
-                              {e.prix ? (
-                                <span style={{ background: "#FFF8E1", border: "1px solid #F0C040", borderRadius: 6, padding: "2px 8px", fontSize: 12, color: "#7A5C00", fontWeight: 600 }}>{e.prix} €</span>
-                              ) : null}
                             </div>
                             {e.note && <div style={{ fontSize: 12, color: "#888", marginTop: 5, fontStyle: "italic" }}>{e.note}</div>}
                             <div style={{ fontSize: 11, color: "#bbb", marginTop: 5 }}>
@@ -626,18 +662,12 @@ export default function App() {
 
         {/* ── Vue Ajout ── */}
         {view === "add" && (() => {
-          const cat = CATALOGUE.find(c => c.id === form.catId);
-          const sous = cat?.sous.find(s => s.id === form.sousId);
-          const canSubmit = (() => {
-            if (!sous || !form.salarié.trim()) return false;
-            if (sous.id === "desherbant" && !form.quantite && !form.quantite2) return false;
-            if (sous.quantite && sous.id !== "desherbant" && !form.quantite) return false;
-            if (sous.nom && !form.nomLibre.trim()) return false;
-            return true;
-          })();
+          const famArticles = form.famille ? articles.filter(a => a.famille === form.famille) : [];
+          const art = articles.find(a => a.famille === form.famille && a.nom === form.articleNom);
+          const canSubmit = !!art && !!form.salarié.trim() && !!form.quantite;
           return (
           <div style={{ paddingTop: 20 }}>
-            <button onClick={() => { setView("list"); setEditingId(null); setForm(f => ({ ...f, catId: null, sousId: null, nomLibre: "", quantite: "", quantite2: "", prix: "", note: "" })); }} style={{ background: "transparent", border: "none", color: C.moss, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 16, padding: 0 }}>← Retour</button>
+            <button onClick={() => { setView("list"); setEditingId(null); setForm(f => ({ ...f, famille: null, articleNom: "", quantite: "", note: "" })); }} style={{ background: "transparent", border: "none", color: C.moss, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 16, padding: 0 }}>← Retour</button>
             <div style={{ background: C.white, borderRadius: 16, padding: 22, boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
               <h2 style={{ margin: "0 0 18px", fontSize: 18, color: C.bark }}>{editingId ? "Modifier la fourniture" : "Saisir une fourniture"}</h2>
 
@@ -668,83 +698,48 @@ export default function App() {
                 </select>
               </div>
 
-              {/* Étape 1 — Catégorie */}
+              {/* Étape 1 — Famille */}
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Fourniture *</label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {CATALOGUE.map(c => (
-                    <button key={c.id} onClick={() => setForm(p => ({ ...p, catId: c.id, sousId: null, nomLibre: "", quantite: "", prix: "" }))}
-                      style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${form.catId === c.id ? C.leaf : C.sand}`, background: form.catId === c.id ? C.leaf : C.white, color: form.catId === c.id ? C.white : C.soil, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
-                      {c.label}
+                  {FAMILLES.map(f => (
+                    <button key={f} onClick={() => setForm(p => ({ ...p, famille: f, articleNom: "", quantite: "" }))}
+                      style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${form.famille === f ? C.leaf : C.sand}`, background: form.famille === f ? C.leaf : C.white, color: form.famille === f ? C.white : C.soil, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
+                      {f}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Étape 2 — Sous-catégorie */}
-              {cat && cat.sous.length > 1 && (
+              {/* Étape 2 — Article */}
+              {form.famille && (
                 <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.sage}` }}>
-                  <label style={{ ...labelStyle, marginBottom: 8 }}>Type *</label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {cat.sous.map(s => (
-                      <button key={s.id} onClick={() => setForm(p => ({ ...p, sousId: s.id, nomLibre: "", quantite: "", prix: "" }))}
-                        style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${form.sousId === s.id ? C.moss : C.sand}`, background: form.sousId === s.id ? C.moss : C.white, color: form.sousId === s.id ? C.white : C.soil, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
+                  <label style={{ ...labelStyle, marginBottom: 8 }}>Article *</label>
+                  {famArticles.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {famArticles.map(a => (
+                        <button key={a.nom} onClick={() => setForm(p => ({ ...p, articleNom: a.nom, quantite: "" }))}
+                          style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${form.articleNom === a.nom ? C.moss : C.sand}`, background: form.articleNom === a.nom ? C.moss : C.white, color: form.articleNom === a.nom ? C.white : C.soil, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
+                          {a.nom}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: C.rust, background: "#FDF1EA", border: `1px solid ${C.sand}`, borderRadius: 10, padding: "10px 12px" }}>
+                      Aucun article dans cette famille. {isAdmin ? "Ajoute-les via le bouton « Articles » en haut." : "Demande à Julien de les ajouter."}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Auto-sélection si une seule sous-catégorie */}
-              {cat && cat.sous.length === 1 && !form.sousId && (() => { setTimeout(() => setForm(p => p.catId === cat.id && !p.sousId ? { ...p, sousId: cat.sous[0].id } : p), 0); return null; })()}
-
-              {/* Étape 3 — Champs selon sous-catégorie */}
-              {sous && (
+              {/* Étape 3 — Quantité */}
+              {art && (
                 <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.leaf}` }}>
-                  {sous.nom && (
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={labelStyle}>Nom *</label>
-                      <input value={form.nomLibre} onChange={e => setForm(p => ({ ...p, nomLibre: e.target.value }))}
-                        placeholder="Nom de la fourniture…" style={inputStyle} />
-                    </div>
-                  )}
-                  {sous.quantite && sous.id !== "desherbant" && (
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={labelStyle}>Quantité *{sous.unite ? ` (${sous.unite})` : ""}</label>
-                      <input type="number" value={form.quantite} onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
-                        placeholder="0" style={inputStyle} />
-                    </div>
-                  )}
-                  {sous.id === "desherbant" && (
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={labelStyle}>Quantité * (au choix)</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, color: C.moss, fontWeight: 600, marginBottom: 4 }}>Bouchons</div>
-                          <input type="number" value={form.quantite}
-                            disabled={!!form.quantite2}
-                            onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
-                            placeholder="0" style={{ ...inputStyle, borderColor: form.quantite ? C.leaf : C.sand, opacity: form.quantite2 ? 0.35 : 1 }} />
-                        </div>
-                        <div style={{ color: "#aaa", fontWeight: 700, fontSize: 14, flexShrink: 0, paddingTop: 18 }}>ou</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, color: C.moss, fontWeight: 600, marginBottom: 4 }}>Pulvérisateur(s)</div>
-                          <input type="number" value={form.quantite2}
-                            disabled={!!form.quantite}
-                            onChange={e => setForm(p => ({ ...p, quantite2: e.target.value }))}
-                            placeholder="0" style={{ ...inputStyle, borderColor: form.quantite2 ? C.leaf : C.sand, opacity: form.quantite ? 0.35 : 1 }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {sous.prix && (
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={labelStyle}>Prix TTC (€)</label>
-                      <input type="number" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))}
-                        placeholder="0.00" step="0.01" style={inputStyle} />
-                    </div>
-                  )}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Quantité *{art.unite ? ` (${art.unite})` : ""}</label>
+                    <input type="number" inputMode="decimal" value={form.quantite} onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
+                      placeholder="0" style={inputStyle} />
+                  </div>
                 </div>
               )}
 
@@ -853,6 +848,109 @@ export default function App() {
                       <button onClick={() => handleDeleteMember(i)}
                         style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.rust}`, background: C.white, color: C.rust, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>🗑</button>
                     </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal gestion des articles (admin) */}
+      {viewArticles && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: C.white, borderRadius: "20px 20px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", fontFamily: "Georgia, serif" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, fontSize: 18, color: C.bark }}>🏷 Gestion des articles</div>
+              <button onClick={() => { setViewArticles(false); setNewArticle({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "" }); setEditingArticle(null); }} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa" }}>✕</button>
+            </div>
+
+            {/* Formulaire d'ajout */}
+            <div style={{ background: C.cream, borderRadius: 12, padding: 16, marginBottom: 20, border: `1px solid ${C.sand}` }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>Famille</label>
+                  <select value={newArticle.famille} onChange={e => setNewArticle(a => ({ ...a, famille: e.target.value }))} style={selectStyle}>
+                    {FAMILLES.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Nom *</label>
+                  <input value={newArticle.nom} onChange={e => setNewArticle(a => ({ ...a, nom: e.target.value }))} placeholder="Nom de l'article" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Unité</label>
+                  <input value={newArticle.unite} onChange={e => setNewArticle(a => ({ ...a, unite: e.target.value }))} placeholder="sac, L, kg, unité…" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Prix TTC (€)</label>
+                  <input type="number" inputMode="decimal" value={newArticle.prixTTC} onChange={e => setNewArticle(a => ({ ...a, prixTTC: e.target.value }))} placeholder="0.00" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Marge souhaitée (%)</label>
+                  <input type="number" inputMode="decimal" value={newArticle.marge} onChange={e => setNewArticle(a => ({ ...a, marge: e.target.value }))} placeholder="30" style={inputStyle} />
+                </div>
+              </div>
+              <button onClick={handleAddArticle} disabled={!newArticle.nom.trim()}
+                style={{ marginTop: 12, width: "100%", padding: "10px 16px", borderRadius: 10, border: "none", background: newArticle.nom.trim() ? C.rust : "#ccc", color: C.white, fontWeight: 700, fontSize: 14, cursor: newArticle.nom.trim() ? "pointer" : "default", fontFamily: "Georgia, serif" }}>
+                + Ajouter l'article
+              </button>
+            </div>
+
+            {/* Liste des articles */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {articles.length === 0 && (
+                <div style={{ textAlign: "center", color: "#999", fontSize: 14, padding: "20px 0" }}>Aucun article pour le moment.</div>
+              )}
+              {articles.map((a, i) => (
+                <div key={i} style={{ background: C.cream, borderRadius: 10, padding: "12px", border: `1px solid ${C.sand}` }}>
+                  {editingArticle?.index === i ? (
+                    <div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div>
+                          <label style={labelStyle}>Famille</label>
+                          <select value={editingArticle.famille} onChange={e => setEditingArticle(ea => ({ ...ea, famille: e.target.value }))} style={selectStyle}>
+                            {FAMILLES.map(f => <option key={f} value={f}>{f}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Nom *</label>
+                          <input value={editingArticle.nom} onChange={e => setEditingArticle(ea => ({ ...ea, nom: e.target.value }))} style={inputStyle} />
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Unité</label>
+                          <input value={editingArticle.unite} onChange={e => setEditingArticle(ea => ({ ...ea, unite: e.target.value }))} style={inputStyle} />
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Prix TTC (€)</label>
+                          <input type="number" inputMode="decimal" value={editingArticle.prixTTC} onChange={e => setEditingArticle(ea => ({ ...ea, prixTTC: e.target.value }))} style={inputStyle} />
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Marge souhaitée (%)</label>
+                          <input type="number" inputMode="decimal" value={editingArticle.marge} onChange={e => setEditingArticle(ea => ({ ...ea, marge: e.target.value }))} style={inputStyle} />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        <button onClick={handleSaveArticle} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "none", background: C.leaf, color: C.white, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>✓ Enregistrer</button>
+                        <button onClick={() => setEditingArticle(null)} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.sand}`, background: C.white, color: C.bark, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>Annuler</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 15, color: C.soil, fontWeight: 700 }}>{a.nom}</span>
+                          <span style={{ fontSize: 11, color: C.moss, background: C.white, border: `1px solid ${C.sand}`, borderRadius: 6, padding: "1px 6px", fontWeight: 600 }}>{a.famille}</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: "#666" }}>
+                          {a.prixTTC !== "" && a.prixTTC != null ? `${a.prixTTC} € TTC` : "— €"}{a.unite ? ` / ${a.unite}` : ""}{a.marge !== "" && a.marge != null ? ` · marge ${a.marge} %` : ""}
+                        </div>
+                      </div>
+                      <button onClick={() => setEditingArticle({ index: i, famille: a.famille || FAMILLES[0], nom: a.nom, unite: a.unite || "", prixTTC: a.prixTTC ?? "", marge: a.marge ?? "" })}
+                        style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.sky}`, background: C.white, color: C.sky, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>✏️</button>
+                      <button onClick={() => handleDeleteArticle(i)}
+                        style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.rust}`, background: C.white, color: C.rust, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>🗑</button>
+                    </div>
                   )}
                 </div>
               ))}
