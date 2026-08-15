@@ -14,6 +14,7 @@ function getStorageKey(societyId) { return "paysage-fournitures-" + societyId + 
 function getChantiersKey(societyId) { return "paysage-chantiers-" + societyId + "-v1"; }
 function getTeamKey(societyId) { return "paysage-team-" + societyId + "-v1"; }
 function getArticlesKey(societyId) { return "paysage-articles-" + societyId + "-v1"; }
+function getFamillesKey(societyId) { return "paysage-familles-" + societyId + "-v1"; }
 
 function todayISO() {
   const d = new Date();
@@ -92,6 +93,20 @@ async function loadArticles(societyId) {
 async function saveArticles(list, societyId) {
   try {
     await supabase.from("app_storage").upsert({ key: getArticlesKey(societyId), value: JSON.stringify(list) }, { onConflict: "key" });
+  } catch {}
+}
+
+async function loadFamilles(societyId) {
+  try {
+    const { data, error } = await supabase.from("app_storage").select("value").eq("key", getFamillesKey(societyId)).single();
+    if (error || !data) return [];
+    return JSON.parse(data.value);
+  } catch { return []; }
+}
+
+async function saveFamilles(list, societyId) {
+  try {
+    await supabase.from("app_storage").upsert({ key: getFamillesKey(societyId), value: JSON.stringify(list) }, { onConflict: "key" });
   } catch {}
 }
 
@@ -256,9 +271,12 @@ export default function App() {
   const [newMemberName, setNewMemberName] = useState("");
   const [editingMember, setEditingMember] = useState(null);
   const [articles, setArticles] = useState([]);
+  const [customFamilles, setCustomFamilles] = useState([]);
   const [viewArticles, setViewArticles] = useState(false);
-  const [newArticle, setNewArticle] = useState({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "" });
+  const [newArticle, setNewArticle] = useState({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "", nouvelleFamille: "" });
   const [editingArticle, setEditingArticle] = useState(null); // { index, famille, nom, unite, prixTTC, marge }
+  // Familles : base + personnalisées ajoutées via "Autre", avec "Autre" toujours en dernier
+  const famillesList = [...FAMILLES.filter(f => f !== "Autre"), ...customFamilles.filter(f => !FAMILLES.includes(f)), "Autre"];
 
   const isAdmin = user?.name?.trim().toLowerCase().startsWith("julien");
 
@@ -286,15 +304,17 @@ export default function App() {
     loadUser().then(async u => {
       if (u) {
         setUser(u);
-        const [list, teamList, articlesList] = await Promise.all([
+        const [list, teamList, articlesList, famillesCustom] = await Promise.all([
           loadChantiers(CHANTIERS, u.societyId),
           loadTeam(u.societyId),
           loadArticles(u.societyId),
+          loadFamilles(u.societyId),
         ]);
         const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
         setChantiers(sorted);
         setTeam(teamList);
         setArticles(articlesList);
+        setCustomFamilles(famillesCustom);
         setForm(emptyForm(u.name, sorted[0]));
       }
       setLoadingUser(false);
@@ -326,15 +346,17 @@ export default function App() {
     const u = { name, societyId };
     setUser(u);
     await saveUser(u);
-    const [list, teamList, articlesList] = await Promise.all([
+    const [list, teamList, articlesList, famillesCustom] = await Promise.all([
       loadChantiers(CHANTIERS, societyId),
       loadTeam(societyId),
       loadArticles(societyId),
+      loadFamilles(societyId),
     ]);
     const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
     setChantiers(sorted);
     setTeam(teamList);
     setArticles(articlesList);
+    setCustomFamilles(famillesCustom);
     setForm(emptyForm(name, sorted[0]));
     refresh();
   }
@@ -456,8 +478,18 @@ export default function App() {
   async function handleAddArticle() {
     const nom = newArticle.nom.trim();
     if (!nom) return;
+    // Si "Autre" + nouvelle famille saisie → on crée la famille
+    let famille = newArticle.famille;
+    if (famille === "Autre" && newArticle.nouvelleFamille.trim()) {
+      famille = newArticle.nouvelleFamille.trim();
+      if (!famillesList.some(f => f.toLowerCase() === famille.toLowerCase())) {
+        const updatedFam = [...customFamilles, famille];
+        setCustomFamilles(updatedFam);
+        await saveFamilles(updatedFam, user.societyId);
+      }
+    }
     const art = {
-      famille: newArticle.famille,
+      famille,
       nom,
       unite: newArticle.unite.trim(),
       prixTTC: newArticle.prixTTC,
@@ -466,7 +498,7 @@ export default function App() {
     const updated = [...articles, art].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
     setArticles(updated);
     await saveArticles(updated, user.societyId);
-    setNewArticle({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "" });
+    setNewArticle({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "", nouvelleFamille: "" });
   }
 
   async function handleSaveArticle() {
@@ -484,8 +516,8 @@ export default function App() {
     setEditingArticle(null);
   }
 
-  async function handleDeleteArticle(idx) {
-    const updated = articles.filter((_, i) => i !== idx);
+  async function handleDeleteArticle(art) {
+    const updated = articles.filter(a => a !== art);
     setArticles(updated);
     await saveArticles(updated, user.societyId);
   }
@@ -702,7 +734,7 @@ export default function App() {
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Fourniture *</label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {FAMILLES.map(f => (
+                  {famillesList.map(f => (
                     <button key={f} onClick={() => setForm(p => ({ ...p, famille: f, articleNom: "", quantite: "" }))}
                       style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${form.famille === f ? C.leaf : C.sand}`, background: form.famille === f ? C.leaf : C.white, color: form.famille === f ? C.white : C.soil, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
                       {f}
@@ -862,7 +894,7 @@ export default function App() {
           <div style={{ background: C.white, borderRadius: "20px 20px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", fontFamily: "Georgia, serif" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 18, color: C.bark }}>🏷 Gestion des articles</div>
-              <button onClick={() => { setViewArticles(false); setNewArticle({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "" }); setEditingArticle(null); }} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa" }}>✕</button>
+              <button onClick={() => { setViewArticles(false); setNewArticle({ famille: FAMILLES[0], nom: "", unite: "", prixTTC: "", marge: "", nouvelleFamille: "" }); setEditingArticle(null); }} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa" }}>✕</button>
             </div>
 
             {/* Formulaire d'ajout */}
@@ -871,8 +903,12 @@ export default function App() {
                 <div>
                   <label style={labelStyle}>Famille</label>
                   <select value={newArticle.famille} onChange={e => setNewArticle(a => ({ ...a, famille: e.target.value }))} style={selectStyle}>
-                    {FAMILLES.map(f => <option key={f} value={f}>{f}</option>)}
+                    {famillesList.map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
+                  {newArticle.famille === "Autre" && (
+                    <input value={newArticle.nouvelleFamille} onChange={e => setNewArticle(a => ({ ...a, nouvelleFamille: e.target.value }))}
+                      placeholder="Nouvelle famille (optionnel)" style={{ ...inputStyle, marginTop: 8 }} />
+                  )}
                 </div>
                 <div>
                   <label style={labelStyle}>Nom *</label>
@@ -897,63 +933,81 @@ export default function App() {
               </button>
             </div>
 
-            {/* Liste des articles */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* Liste des articles — groupée par famille, triée A→Z */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {articles.length === 0 && (
                 <div style={{ textAlign: "center", color: "#999", fontSize: 14, padding: "20px 0" }}>Aucun article pour le moment.</div>
               )}
-              {articles.map((a, i) => (
-                <div key={i} style={{ background: C.cream, borderRadius: 10, padding: "12px", border: `1px solid ${C.sand}` }}>
-                  {editingArticle?.index === i ? (
-                    <div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        <div>
-                          <label style={labelStyle}>Famille</label>
-                          <select value={editingArticle.famille} onChange={e => setEditingArticle(ea => ({ ...ea, famille: e.target.value }))} style={selectStyle}>
-                            {FAMILLES.map(f => <option key={f} value={f}>{f}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Nom *</label>
-                          <input value={editingArticle.nom} onChange={e => setEditingArticle(ea => ({ ...ea, nom: e.target.value }))} style={inputStyle} />
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Unité</label>
-                          <input value={editingArticle.unite} onChange={e => setEditingArticle(ea => ({ ...ea, unite: e.target.value }))} style={inputStyle} />
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Prix TTC (€)</label>
-                          <input type="number" inputMode="decimal" value={editingArticle.prixTTC} onChange={e => setEditingArticle(ea => ({ ...ea, prixTTC: e.target.value }))} style={inputStyle} />
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Marge souhaitée (%)</label>
-                          <input type="number" inputMode="decimal" value={editingArticle.marge} onChange={e => setEditingArticle(ea => ({ ...ea, marge: e.target.value }))} style={inputStyle} />
-                        </div>
+              {(() => {
+                const orderedFamilles = [
+                  ...famillesList.filter(fam => articles.some(a => a.famille === fam)),
+                  ...[...new Set(articles.map(a => a.famille))].filter(fam => !famillesList.includes(fam)).sort((a, b) => a.localeCompare(b, "fr")),
+                ];
+                return orderedFamilles.map(fam => {
+                  const items = articles.filter(a => a.famille === fam).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+                  return (
+                    <div key={fam}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.moss, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, borderBottom: `2px solid ${C.sand}`, paddingBottom: 4 }}>
+                        {fam} <span style={{ color: C.sage, fontWeight: 600 }}>({items.length})</span>
                       </div>
-                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                        <button onClick={handleSaveArticle} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "none", background: C.leaf, color: C.white, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>✓ Enregistrer</button>
-                        <button onClick={() => setEditingArticle(null)} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.sand}`, background: C.white, color: C.bark, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>Annuler</button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {items.map(a => {
+                          const idx = articles.indexOf(a);
+                          return (
+                          <div key={idx} style={{ background: C.cream, borderRadius: 10, padding: "12px", border: `1px solid ${C.sand}` }}>
+                            {editingArticle?.index === idx ? (
+                              <div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                  <div>
+                                    <label style={labelStyle}>Famille</label>
+                                    <select value={editingArticle.famille} onChange={e => setEditingArticle(ea => ({ ...ea, famille: e.target.value }))} style={selectStyle}>
+                                      {famillesList.map(f => <option key={f} value={f}>{f}</option>)}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Nom *</label>
+                                    <input value={editingArticle.nom} onChange={e => setEditingArticle(ea => ({ ...ea, nom: e.target.value }))} style={inputStyle} />
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Unité</label>
+                                    <input value={editingArticle.unite} onChange={e => setEditingArticle(ea => ({ ...ea, unite: e.target.value }))} style={inputStyle} />
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Prix TTC (€)</label>
+                                    <input type="number" inputMode="decimal" value={editingArticle.prixTTC} onChange={e => setEditingArticle(ea => ({ ...ea, prixTTC: e.target.value }))} style={inputStyle} />
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Marge souhaitée (%)</label>
+                                    <input type="number" inputMode="decimal" value={editingArticle.marge} onChange={e => setEditingArticle(ea => ({ ...ea, marge: e.target.value }))} style={inputStyle} />
+                                  </div>
+                                </div>
+                                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                                  <button onClick={handleSaveArticle} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "none", background: C.leaf, color: C.white, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>✓ Enregistrer</button>
+                                  <button onClick={() => setEditingArticle(null)} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.sand}`, background: C.white, color: C.bark, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>Annuler</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 15, color: C.soil, fontWeight: 700, marginBottom: 2 }}>{a.nom}</div>
+                                  <div style={{ fontSize: 13, color: "#666" }}>
+                                    {a.prixTTC !== "" && a.prixTTC != null ? `${a.prixTTC} € TTC` : "— €"}{a.unite ? ` / ${a.unite}` : ""}{a.marge !== "" && a.marge != null ? ` · marge ${a.marge} %` : ""}
+                                  </div>
+                                </div>
+                                <button onClick={() => setEditingArticle({ index: idx, famille: a.famille || FAMILLES[0], nom: a.nom, unite: a.unite || "", prixTTC: a.prixTTC ?? "", marge: a.marge ?? "" })}
+                                  style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.sky}`, background: C.white, color: C.sky, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>✏️</button>
+                                <button onClick={() => handleDeleteArticle(a)}
+                                  style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.rust}`, background: C.white, color: C.rust, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>🗑</button>
+                              </div>
+                            )}
+                          </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 15, color: C.soil, fontWeight: 700 }}>{a.nom}</span>
-                          <span style={{ fontSize: 11, color: C.moss, background: C.white, border: `1px solid ${C.sand}`, borderRadius: 6, padding: "1px 6px", fontWeight: 600 }}>{a.famille}</span>
-                        </div>
-                        <div style={{ fontSize: 13, color: "#666" }}>
-                          {a.prixTTC !== "" && a.prixTTC != null ? `${a.prixTTC} € TTC` : "— €"}{a.unite ? ` / ${a.unite}` : ""}{a.marge !== "" && a.marge != null ? ` · marge ${a.marge} %` : ""}
-                        </div>
-                      </div>
-                      <button onClick={() => setEditingArticle({ index: i, famille: a.famille || FAMILLES[0], nom: a.nom, unite: a.unite || "", prixTTC: a.prixTTC ?? "", marge: a.marge ?? "" })}
-                        style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.sky}`, background: C.white, color: C.sky, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>✏️</button>
-                      <button onClick={() => handleDeleteArticle(i)}
-                        style={{ padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.rust}`, background: C.white, color: C.rust, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>🗑</button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>
