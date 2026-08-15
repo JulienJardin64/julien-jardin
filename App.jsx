@@ -84,29 +84,33 @@ async function saveTeam(list, societyId) {
 
 async function loadArticles(societyId) {
   try {
-    const { data, error } = await supabase.from("app_storage").select("value").eq("key", getArticlesKey(societyId)).single();
-    if (error || !data) return [];
-    return JSON.parse(data.value);
+    const { data, error } = await supabase.from("app_storage").select("value").eq("key", getArticlesKey(societyId));
+    if (error || !data || data.length === 0) return [];
+    return JSON.parse(data[data.length - 1].value);
   } catch { return []; }
 }
 
 async function saveArticles(list, societyId) {
   try {
-    await supabase.from("app_storage").upsert({ key: getArticlesKey(societyId), value: JSON.stringify(list) }, { onConflict: "key" });
+    const key = getArticlesKey(societyId);
+    await supabase.from("app_storage").delete().eq("key", key);
+    await supabase.from("app_storage").insert({ key, value: JSON.stringify(list) });
   } catch {}
 }
 
 async function loadFamilles(societyId) {
   try {
-    const { data, error } = await supabase.from("app_storage").select("value").eq("key", getFamillesKey(societyId)).single();
-    if (error || !data) return [];
-    return JSON.parse(data.value);
+    const { data, error } = await supabase.from("app_storage").select("value").eq("key", getFamillesKey(societyId));
+    if (error || !data || data.length === 0) return [];
+    return JSON.parse(data[data.length - 1].value);
   } catch { return []; }
 }
 
 async function saveFamilles(list, societyId) {
   try {
-    await supabase.from("app_storage").upsert({ key: getFamillesKey(societyId), value: JSON.stringify(list) }, { onConflict: "key" });
+    const key = getFamillesKey(societyId);
+    await supabase.from("app_storage").delete().eq("key", key);
+    await supabase.from("app_storage").insert({ key, value: JSON.stringify(list) });
   } catch {}
 }
 
@@ -940,9 +944,10 @@ export default function App() {
               )}
               {(() => {
                 // Toutes les familles présentes dans les articles, par ordre alphabétique
-                const orderedFamilles = [...new Set(articles.map(a => a.famille))].sort((a, b) => a.localeCompare(b, "fr"));
+                const famOf = a => (a.famille || "Autre");
+                const orderedFamilles = [...new Set(articles.map(famOf))].sort((a, b) => a.localeCompare(b, "fr"));
                 return orderedFamilles.map(fam => {
-                  const items = articles.filter(a => a.famille === fam).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+                  const items = articles.filter(a => famOf(a) === fam).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr"));
                   return (
                     <div key={fam}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: C.moss, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, borderBottom: `2px solid ${C.sand}`, paddingBottom: 4 }}>
