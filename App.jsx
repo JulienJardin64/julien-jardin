@@ -939,10 +939,8 @@ export default function App() {
                 <div style={{ textAlign: "center", color: "#999", fontSize: 14, padding: "20px 0" }}>Aucun article pour le moment.</div>
               )}
               {(() => {
-                const orderedFamilles = [
-                  ...famillesList.filter(fam => articles.some(a => a.famille === fam)),
-                  ...[...new Set(articles.map(a => a.famille))].filter(fam => !famillesList.includes(fam)).sort((a, b) => a.localeCompare(b, "fr")),
-                ];
+                // Toutes les familles présentes dans les articles, par ordre alphabétique
+                const orderedFamilles = [...new Set(articles.map(a => a.famille))].sort((a, b) => a.localeCompare(b, "fr"));
                 return orderedFamilles.map(fam => {
                   const items = articles.filter(a => a.famille === fam).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
                   return (
