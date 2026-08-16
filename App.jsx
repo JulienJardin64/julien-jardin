@@ -327,7 +327,8 @@ export default function App() {
         const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
         setChantiers(sorted);
         setTeam(teamList);
-        setArticles(articlesList);
+        setArticles(articlesList.length === 0 ? SEED_ARTICLES : articlesList);
+        if (articlesList.length === 0) saveArticles(SEED_ARTICLES, u.societyId);
         setCustomFamilles(famillesCustom);
         setForm(emptyForm(u.name, sorted[0]));
       }
@@ -369,7 +370,8 @@ export default function App() {
     const sorted = [...list].sort((a, b) => a.localeCompare(b, "fr"));
     setChantiers(sorted);
     setTeam(teamList);
-    setArticles(articlesList);
+    setArticles(articlesList.length === 0 ? SEED_ARTICLES : articlesList);
+    if (articlesList.length === 0) saveArticles(SEED_ARTICLES, societyId);
     setCustomFamilles(famillesCustom);
     setForm(emptyForm(name, sorted[0]));
     refresh();
@@ -532,15 +534,6 @@ export default function App() {
 
   async function handleDeleteArticle(art) {
     const updated = articles.filter(a => a !== art);
-    setArticles(updated);
-    await saveArticles(updated, user.societyId);
-  }
-
-  async function handleImportBaseArticles() {
-    const exists = (fam, nom) => articles.some(a => (a.famille || "").toLowerCase() === fam.toLowerCase() && (a.nom || "").toLowerCase() === nom.toLowerCase());
-    const toAdd = SEED_ARTICLES.filter(s => !exists(s.famille, s.nom));
-    if (toAdd.length === 0) return;
-    const updated = [...articles, ...toAdd].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
     setArticles(updated);
     await saveArticles(updated, user.societyId);
   }
@@ -955,12 +948,6 @@ export default function App() {
                 + Ajouter l'article
               </button>
             </div>
-
-            {/* Import temporaire des articles de base (reconstruits depuis l'ancien catalogue) */}
-            <button onClick={handleImportBaseArticles}
-              style={{ width: "100%", marginBottom: 20, padding: "10px 16px", borderRadius: 10, border: `1.5px dashed ${C.moss}`, background: "#EDF7E5", color: C.moss, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
-              ⬇ Importer les articles de base (Désherbant, Terreau, Gazon…)
-            </button>
 
             {/* Liste des articles — groupée par famille, triée A→Z */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
