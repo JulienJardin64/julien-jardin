@@ -307,7 +307,9 @@ export default function App() {
     note: "",
     // sélection article
     famille: null,       // famille choisie
-    articleNom: "",      // nom de l'article choisi
+    articleNom: "",      // nom de l'article choisi (familles à catalogue)
+    nomLibre: "",        // nom libre (familles Végétaux / Autre)
+    prix: "",            // prix TTC saisi (familles Végétaux / Autre)
     quantite: "",
   }), []);
 
@@ -388,21 +390,23 @@ export default function App() {
   }
 
   async function handleSubmit() {
+    const isFreeForm = form.famille === "Végétaux" || form.famille === "Autre";
     const art = articles.find(a => a.famille === form.famille && a.nom === form.articleNom);
-    if (!art || !form.salarié.trim() || !form.quantite) return;
+    if (!form.salarié.trim() || !form.quantite) return;
+    if (isFreeForm ? !form.nomLibre.trim() : !art) return;
     const isoDate = new Date(form.date + "T12:00:00").toISOString();
     const newEntry = {
       chantier: form.chantier,
       salarié: form.salarié,
       date: isoDate,
       note: form.note,
-      fourniture: art.nom,
-      categorie: art.famille,
+      fourniture: isFreeForm ? form.nomLibre.trim() : art.nom,
+      categorie: form.famille,
       quantite: form.quantite,
-      unite: art.unite || "",
+      unite: isFreeForm ? "" : (art.unite || ""),
       quantite2: "",
-      prix: art.prixTTC ?? "",   // stocké pour l'export PDF, non affiché à la saisie
-      marge: art.marge ?? "",    // stocké pour l'export PDF, non affiché à la saisie
+      prix: isFreeForm ? (form.prix || "") : (art.prixTTC ?? ""),   // stocké pour l'export PDF
+      marge: isFreeForm ? "" : (art.marge ?? ""),                    // stocké pour l'export PDF
       id: Date.now(),
     };
     let updated;
@@ -417,7 +421,7 @@ export default function App() {
     setSaved(true);
     setView("list");
     setTimeout(() => { setSaved(false); }, 1200);
-    setForm(f => ({ ...f, famille: null, articleNom: "", quantite: "", note: "", date: todayISO(), chantier: chantiers[0] || f.chantier }));
+    setForm(f => ({ ...f, famille: null, articleNom: "", nomLibre: "", prix: "", quantite: "", note: "", date: todayISO(), chantier: chantiers[0] || f.chantier }));
   }
 
   async function handleDelete(id) {
@@ -428,7 +432,8 @@ export default function App() {
   }
 
   function handleEdit(e) {
-    // Reconstituer la famille et l'article depuis l'entrée stockée
+    // Reconstituer la famille et le mode (article ou saisie libre) depuis l'entrée
+    const isFreeForm = e.categorie === "Végétaux" || e.categorie === "Autre";
     setEditingId(e.id);
     setForm({
       chantier: e.chantier,
@@ -436,7 +441,9 @@ export default function App() {
       date: e.date.slice(0, 10),
       note: e.note || "",
       famille: e.categorie || null,
-      articleNom: e.fourniture || "",
+      articleNom: isFreeForm ? "" : (e.fourniture || ""),
+      nomLibre: isFreeForm ? (e.fourniture || "") : "",
+      prix: isFreeForm ? (e.prix || "") : "",
       quantite: e.quantite === "1" ? "" : (e.quantite || ""),
     });
     setView("add");
@@ -710,12 +717,13 @@ export default function App() {
 
         {/* ── Vue Ajout ── */}
         {view === "add" && (() => {
-          const famArticles = form.famille ? articles.filter(a => a.famille === form.famille) : [];
+          const isFreeForm = form.famille === "Végétaux" || form.famille === "Autre";
+          const famArticles = (form.famille && !isFreeForm) ? articles.filter(a => a.famille === form.famille) : [];
           const art = articles.find(a => a.famille === form.famille && a.nom === form.articleNom);
-          const canSubmit = !!art && !!form.salarié.trim() && !!form.quantite;
+          const canSubmit = !!form.salarié.trim() && !!form.quantite && (isFreeForm ? !!form.nomLibre.trim() : !!art);
           return (
           <div style={{ paddingTop: 20 }}>
-            <button onClick={() => { setView("list"); setEditingId(null); setForm(f => ({ ...f, famille: null, articleNom: "", quantite: "", note: "" })); }} style={{ background: "transparent", border: "none", color: C.moss, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 16, padding: 0 }}>← Retour</button>
+            <button onClick={() => { setView("list"); setEditingId(null); setForm(f => ({ ...f, famille: null, articleNom: "", nomLibre: "", prix: "", quantite: "", note: "" })); }} style={{ background: "transparent", border: "none", color: C.moss, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 16, padding: 0 }}>← Retour</button>
             <div style={{ background: C.white, borderRadius: 16, padding: 22, boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
               <h2 style={{ margin: "0 0 18px", fontSize: 18, color: C.bark }}>{editingId ? "Modifier la fourniture" : "Saisir une fourniture"}</h2>
 
@@ -759,8 +767,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Étape 2 — Article */}
-              {form.famille && (
+              {/* Étape 2 — Article (familles à catalogue) */}
+              {form.famille && !isFreeForm && (
                 <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.sage}` }}>
                   <label style={{ ...labelStyle, marginBottom: 8 }}>Article *</label>
                   {famArticles.length > 0 ? (
@@ -780,13 +788,34 @@ export default function App() {
                 </div>
               )}
 
-              {/* Étape 3 — Quantité */}
-              {art && (
+              {/* Étape 3 — Quantité (famille à catalogue, article choisi) */}
+              {!isFreeForm && art && (
                 <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.leaf}` }}>
                   <div style={{ marginBottom: 12 }}>
                     <label style={labelStyle}>Quantité *{art.unite ? ` (${art.unite})` : ""}</label>
                     <input type="number" inputMode="decimal" value={form.quantite} onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
                       placeholder="0" style={inputStyle} />
+                  </div>
+                </div>
+              )}
+
+              {/* Saisie libre — familles Végétaux / Autre (Nom, Quantité, Prix TTC) */}
+              {isFreeForm && (
+                <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.leaf}` }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Nom *</label>
+                    <input value={form.nomLibre} onChange={e => setForm(p => ({ ...p, nomLibre: e.target.value }))}
+                      placeholder="Nom de la fourniture…" style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Quantité *</label>
+                    <input type="number" inputMode="decimal" value={form.quantite} onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
+                      placeholder="0" style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Prix TTC (€)</label>
+                    <input type="number" inputMode="decimal" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))}
+                      placeholder="0.00" step="0.01" style={inputStyle} />
                   </div>
                 </div>
               )}
