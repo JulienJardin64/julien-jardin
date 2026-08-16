@@ -10,6 +10,16 @@ const LOGO_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQUAAAENCAYAAAAG
 const USER_KEY = "paysage-user-v1";
 const DEFAULT_TEAM = ["Julien", "Théo", "Raphaël", "Florent"];
 const FAMILLES = ["Traitement", "Terreau", "Gazon", "Végétaux", "Autre"];
+const SEED_ARTICLES = [
+  { famille: "Traitement", nom: "Désherbant", unite: "L pulvérisateur", prixTTC: "", marge: "" },
+  { famille: "Traitement", nom: "Pyrale", unite: "", prixTTC: "", marge: "" },
+  { famille: "Traitement", nom: "Bouillie bordelaise", unite: "", prixTTC: "", marge: "" },
+  { famille: "Traitement", nom: "Oïdium", unite: "", prixTTC: "", marge: "" },
+  { famille: "Traitement", nom: "Insectes", unite: "", prixTTC: "", marge: "" },
+  { famille: "Terreau", nom: "Terreau", unite: "sacs", prixTTC: "", marge: "" },
+  { famille: "Gazon", nom: "Gazon rustique", unite: "sacs", prixTTC: "", marge: "" },
+  { famille: "Gazon", nom: "Gazon ombre", unite: "sacs", prixTTC: "", marge: "" },
+];
 function getStorageKey(societyId) { return "paysage-fournitures-" + societyId + "-v1"; }
 function getChantiersKey(societyId) { return "paysage-chantiers-" + societyId + "-v1"; }
 function getTeamKey(societyId) { return "paysage-team-" + societyId + "-v1"; }
@@ -526,6 +536,15 @@ export default function App() {
     await saveArticles(updated, user.societyId);
   }
 
+  async function handleImportBaseArticles() {
+    const exists = (fam, nom) => articles.some(a => (a.famille || "").toLowerCase() === fam.toLowerCase() && (a.nom || "").toLowerCase() === nom.toLowerCase());
+    const toAdd = SEED_ARTICLES.filter(s => !exists(s.famille, s.nom));
+    if (toAdd.length === 0) return;
+    const updated = [...articles, ...toAdd].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+    setArticles(updated);
+    await saveArticles(updated, user.societyId);
+  }
+
   const filtered = filterChantier === "Tous" ? entries : entries.filter(e => e.chantier === filterChantier);
   const grouped = filtered.reduce((acc, e) => { (acc[e.chantier] = acc[e.chantier] || []).push(e); return acc; }, {});
   const chantierCounts = entries.reduce((acc, e) => { acc[e.chantier] = (acc[e.chantier] || 0) + 1; return acc; }, {});
@@ -936,6 +955,12 @@ export default function App() {
                 + Ajouter l'article
               </button>
             </div>
+
+            {/* Import temporaire des articles de base (reconstruits depuis l'ancien catalogue) */}
+            <button onClick={handleImportBaseArticles}
+              style={{ width: "100%", marginBottom: 20, padding: "10px 16px", borderRadius: 10, border: `1.5px dashed ${C.moss}`, background: "#EDF7E5", color: C.moss, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" }}>
+              ⬇ Importer les articles de base (Désherbant, Terreau, Gazon…)
+            </button>
 
             {/* Liste des articles — groupée par famille, triée A→Z */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
