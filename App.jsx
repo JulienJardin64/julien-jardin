@@ -11,7 +11,6 @@ const USER_KEY = "paysage-user-v1";
 const DEFAULT_TEAM = ["Julien", "Théo", "Raphaël", "Florent"];
 const FAMILLES = ["Traitement", "Terreau", "Gazon", "Végétaux", "Autre"];
 const SEED_ARTICLES = [
-  { famille: "Traitement", nom: "Désherbant", unite: "L pulvérisateur", prixTTC: "", marge: "" },
   { famille: "Traitement", nom: "Pyrale", unite: "", prixTTC: "", marge: "" },
   { famille: "Traitement", nom: "Bouillie bordelaise", unite: "", prixTTC: "", marge: "" },
   { famille: "Traitement", nom: "Oïdium", unite: "", prixTTC: "", marge: "" },
@@ -390,23 +389,24 @@ export default function App() {
   }
 
   async function handleSubmit() {
+    const isDesherbant = form.famille === "Désherbant";
     const isFreeForm = form.famille === "Végétaux" || form.famille === "Autre";
     const art = articles.find(a => a.famille === form.famille && a.nom === form.articleNom);
     if (!form.salarié.trim() || !form.quantite) return;
-    if (isFreeForm ? !form.nomLibre.trim() : !art) return;
+    if (!isDesherbant && (isFreeForm ? !form.nomLibre.trim() : !art)) return;
     const isoDate = new Date(form.date + "T12:00:00").toISOString();
     const newEntry = {
       chantier: form.chantier,
       salarié: form.salarié,
       date: isoDate,
       note: form.note,
-      fourniture: isFreeForm ? form.nomLibre.trim() : art.nom,
+      fourniture: isDesherbant ? "Désherbant" : (isFreeForm ? form.nomLibre.trim() : art.nom),
       categorie: form.famille,
       quantite: form.quantite,
-      unite: isFreeForm ? "" : (art.unite || ""),
+      unite: isDesherbant ? "L pulvérisateur" : (isFreeForm ? "" : (art.unite || "")),
       quantite2: "",
-      prix: isFreeForm ? (form.prix || "") : (art.prixTTC ?? ""),   // stocké pour l'export PDF
-      marge: isFreeForm ? "" : (art.marge ?? ""),                    // stocké pour l'export PDF
+      prix: isDesherbant ? "" : (isFreeForm ? (form.prix || "") : (art.prixTTC ?? "")),   // stocké pour l'export PDF
+      marge: isDesherbant ? "" : (isFreeForm ? "" : (art.marge ?? "")),                    // stocké pour l'export PDF
       id: Date.now(),
     };
     let updated;
@@ -432,7 +432,8 @@ export default function App() {
   }
 
   function handleEdit(e) {
-    // Reconstituer la famille et le mode (article ou saisie libre) depuis l'entrée
+    // Reconstituer la famille et le mode (article / saisie libre / désherbant) depuis l'entrée
+    const isDesherbant = e.categorie === "Désherbant";
     const isFreeForm = e.categorie === "Végétaux" || e.categorie === "Autre";
     setEditingId(e.id);
     setForm({
@@ -441,7 +442,7 @@ export default function App() {
       date: e.date.slice(0, 10),
       note: e.note || "",
       famille: e.categorie || null,
-      articleNom: isFreeForm ? "" : (e.fourniture || ""),
+      articleNom: (isFreeForm || isDesherbant) ? "" : (e.fourniture || ""),
       nomLibre: isFreeForm ? (e.fourniture || "") : "",
       prix: isFreeForm ? (e.prix || "") : "",
       quantite: e.quantite === "1" ? "" : (e.quantite || ""),
@@ -717,10 +718,11 @@ export default function App() {
 
         {/* ── Vue Ajout ── */}
         {view === "add" && (() => {
+          const isDesherbant = form.famille === "Désherbant";
           const isFreeForm = form.famille === "Végétaux" || form.famille === "Autre";
-          const famArticles = (form.famille && !isFreeForm) ? articles.filter(a => a.famille === form.famille) : [];
+          const famArticles = (form.famille && !isFreeForm && !isDesherbant) ? articles.filter(a => a.famille === form.famille) : [];
           const art = articles.find(a => a.famille === form.famille && a.nom === form.articleNom);
-          const canSubmit = !!form.salarié.trim() && !!form.quantite && (isFreeForm ? !!form.nomLibre.trim() : !!art);
+          const canSubmit = !!form.salarié.trim() && !!form.quantite && (isDesherbant ? true : (isFreeForm ? !!form.nomLibre.trim() : !!art));
           return (
           <div style={{ paddingTop: 20 }}>
             <button onClick={() => { setView("list"); setEditingId(null); setForm(f => ({ ...f, famille: null, articleNom: "", nomLibre: "", prix: "", quantite: "", note: "" })); }} style={{ background: "transparent", border: "none", color: C.moss, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 16, padding: 0 }}>← Retour</button>
@@ -759,16 +761,20 @@ export default function App() {
                 <label style={labelStyle}>Fourniture *</label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {famillesList.map(f => (
-                    <button key={f} onClick={() => setForm(p => ({ ...p, famille: f, articleNom: "", quantite: "" }))}
+                    <button key={f} onClick={() => setForm(p => ({ ...p, famille: f, articleNom: "", nomLibre: "", prix: "", quantite: "" }))}
                       style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${form.famille === f ? C.leaf : C.sand}`, background: form.famille === f ? C.leaf : C.white, color: form.famille === f ? C.white : C.soil, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
                       {f}
                     </button>
                   ))}
+                  <button key="__desherbant" onClick={() => setForm(p => ({ ...p, famille: "Désherbant", articleNom: "", nomLibre: "", prix: "", quantite: "" }))}
+                    style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${C.rust}`, background: form.famille === "Désherbant" ? C.rust : C.white, color: form.famille === "Désherbant" ? C.white : C.rust, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "Georgia, serif", transition: "all 0.15s" }}>
+                    Désherbant
+                  </button>
                 </div>
               </div>
 
               {/* Étape 2 — Article (familles à catalogue) */}
-              {form.famille && !isFreeForm && (
+              {form.famille && !isFreeForm && !isDesherbant && (
                 <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.sage}` }}>
                   <label style={{ ...labelStyle, marginBottom: 8 }}>Article *</label>
                   {famArticles.length > 0 ? (
@@ -793,6 +799,17 @@ export default function App() {
                 <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.leaf}` }}>
                   <div style={{ marginBottom: 12 }}>
                     <label style={labelStyle}>Quantité *{art.unite ? ` (${art.unite})` : ""}</label>
+                    <input type="number" inputMode="decimal" value={form.quantite} onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
+                      placeholder="0" style={inputStyle} />
+                  </div>
+                </div>
+              )}
+
+              {/* Désherbant — saisie directe de la quantité (L pulvérisateur) */}
+              {isDesherbant && (
+                <div style={{ marginBottom: 14, paddingLeft: 8, borderLeft: `3px solid ${C.rust}` }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Quantité * (L pulvérisateur)</label>
                     <input type="number" inputMode="decimal" value={form.quantite} onChange={e => setForm(p => ({ ...p, quantite: e.target.value }))}
                       placeholder="0" style={inputStyle} />
                   </div>
